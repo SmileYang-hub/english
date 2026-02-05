@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dora Memory"> <link rel="apple-touch-icon" href="icon-192.png">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('離線功能已啟動!', reg))
+        .catch(err => console.log('離線功能註冊失敗:', err));
+    });
+  }
+</script>    
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dora Memory - Pro Edition</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Iansui&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        doraBlue: '#009BDE', doraRed: '#E4002B', doraYellow: '#F1C40F',
+                        doraGreen: '#2ECC71', doraBg: '#F0F9FF', doraDark: '#333333'
+                    },
+                    fontFamily: { sans: ['Iansui', 'sans-serif'] },
+                    boxShadow: { 'soft': '0 10px 30px -5px rgba(0, 155, 222, 0.2)', 'glow': '0 0 20px rgba(241, 196, 15, 0.6)' }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #F0F9FF; -webkit-tap-highlight-color: transparent; user-select: none; overflow: hidden; }
+        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); border: 2px solid rgba(255, 255, 255, 0.9); transition: all 0.3s ease; }
+        .view-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; padding-bottom: 100px; }
+        .view-layer.active { display: flex; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .btn-real-push { transition: all 0.1s; transform: translateY(0); }
+        .btn-real-push:active { transform: translateY(4px); }
+        .nav-btn.active { color: #F1C40F; transform: scale(1.1); }
+        .nav-btn.active i { fill: #F1C40F; }
+        .filter-btn.active { background-color: #009BDE !important; color: white !important; }
+        .reading-now { background-color: #E0F2FE !important; border-color: #009BDE !important; transform: scale(1.02); }
+    </style>
+</head>
+<body class="font-sans text-doraDark h-[100dvh] w-full flex flex-col items-center">
+
+    <main class="w-full max-w-2xl h-full flex flex-col relative p-4">
+        <header class="flex justify-between items-center py-4 px-2 z-50 h-[80px]">
+            <div class="flex items-center gap-2">
+                <i data-lucide="bell" class="w-6 h-6 text-doraYellow fill-doraYellow"></i>
+                <h1 class="text-xl font-bold text-doraBlue tracking-tight uppercase">Memory</h1>
+            </div>
+            <div id="header-counter" class="text-xl font-bold text-doraGreen mx-auto">0 / 0</div>
+            <button onclick="modal.toggleSortMenu()" class="flex items-center gap-2 text-sm font-bold bg-white/60 px-4 py-2 rounded-full text-doraBlue border border-doraBlue/20 backdrop-blur-sm active:scale-95 transition-all">
+                <span id="mode-badge-text">LEARNING</span>
+                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </button>
+        </header>
+
+        <div class="flex-1 relative w-full flex flex-col overflow-hidden">
+            <section id="view-flashcard" class="view-layer active z-10 gap-4">
+                <div class="glass-panel w-full flex-[1.5] rounded-[2.5rem] flex flex-col relative p-6 shadow-soft">
+                    <div class="w-full flex justify-between items-start">
+                        <button id="btn-status" class="w-14 h-14 rounded-full bg-white shadow-sm flex items-center justify-center border-2 border-gray-100 active:scale-95"></button>
+                        <div class="bg-white/50 backdrop-blur-sm p-1.5 rounded-full flex items-center gap-2 border border-white">
+                            <button id="btn-prev-card" class="w-10 h-10 rounded-full bg-white text-gray-400 flex items-center justify-center active:scale-90"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
+                            <button id="btn-autoplay" class="w-12 h-12 rounded-full bg-white text-doraBlue border-2 border-doraBlue flex items-center justify-center active:scale-95"><i data-lucide="play" class="w-6 h-6 fill-current"></i></button>
+                            <button id="btn-tts" class="w-12 h-12 rounded-full bg-doraYellow text-white shadow-glow flex items-center justify-center active:scale-95"><i data-lucide="volume-2" class="w-6 h-6"></i></button>
+                            <button id="btn-next-card" class="w-10 h-10 rounded-full bg-white text-gray-400 flex items-center justify-center active:scale-90"><i data-lucide="chevron-right" class="w-6 h-6"></i></button>
+                        </div>
+                    </div>
+                    <div class="flex-1 flex items-center justify-center w-full">
+                        <h2 id="card-word" class="text-5xl font-bold text-doraBlue text-center px-2">Loading...</h2>
+                    </div>
+                </div>
+
+                <div class="w-full h-[140px] shrink-0 relative mb-4">
+                    <div id="hint-container" class="glass-panel absolute inset-0 flex items-center justify-center p-6 pointer-events-none opacity-0 transition-opacity z-20 bg-white/95 rounded-[2.5rem]">
+                        <p id="hint-text" class="text-2xl text-gray-700 font-bold text-center"></p>
+                    </div>
+                    <div id="action-buttons-container" class="w-full h-full">
+                        <div id="nav-buttons-normal" class="w-full flex justify-between gap-4 h-full">
+                            <button onclick="router.navigate('meaning')" class="btn-real-push flex-1 bg-[#E8F5E9] rounded-[2rem] flex flex-col items-center justify-center border-b-[6px] border-[#C8E6C9]">
+                                <i data-lucide="book-open" class="w-10 h-10 text-[#4CAF50] mb-1"></i>
+                                <span class="text-[#4CAF50] font-black text-lg uppercase">Meaning</span>
+                            </button>
+                            <button onclick="router.navigate('sentence')" class="btn-real-push flex-1 bg-[#FFF3E0] rounded-[2rem] flex flex-col items-center justify-center border-b-[6px] border-[#FFE0B2]">
+                                <i data-lucide="message-square" class="w-10 h-10 text-[#FF9800] mb-1"></i>
+                                <span class="text-[#FF9800] font-black text-lg uppercase">Sentence</span>
+                            </button>
+                        </div>
+                        <div id="nav-buttons-quiz" class="w-full hidden flex flex-row justify-between gap-4 h-full">
+                            <button id="btn-quiz-forget" class="btn-real-push flex-1 bg-gray-100 text-gray-400 rounded-[2rem] font-bold flex flex-col items-center justify-center border-b-[6px] border-gray-300">
+                                <i data-lucide="cloud-rain" class="w-10 h-10 mb-1"></i><span class="text-lg">FORGOT</span>
+                            </button>
+                            <button id="btn-quiz-remember" class="btn-real-push flex-1 bg-doraRed text-white rounded-[2rem] font-bold flex flex-col items-center justify-center border-b-[6px] border-red-800 shadow-glow">
+                                <i data-lucide="zap" class="w-10 h-10 mb-1 fill-white"></i><span class="text-lg">GOT IT!</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-meaning" class="view-layer z-30 bg-doraBg hidden">
+                <div class="flex-1 flex flex-col gap-4 overflow-y-auto no-scrollbar pt-2 px-1 pb-24">
+                    <div class="bg-white rounded-[2rem] p-6 shadow-sm flex items-center justify-between">
+                        <div class="flex items-center gap-3"><div class="w-2 h-10 bg-[#4CAF50] rounded-full"></div><h2 id="detail-word-a" class="text-3xl font-bold text-doraBlue">Word</h2></div>
+                        <button onclick="router.back()" class="text-doraRed active:scale-90"><i data-lucide="undo-2" class="w-10 h-10"></i></button>
+                    </div>
+                    <div class="glass-panel rounded-[2rem] p-8 space-y-6">
+                        <div><span class="text-doraRed font-bold mb-2 text-sm block tracking-widest uppercase">Context Meaning</span><p id="detail-context" class="text-2xl text-gray-700 font-bold">...</p></div>
+                        <div class="w-full h-[1px] bg-gray-200"></div>
+                        <div><span class="text-doraYellow font-bold mb-2 text-sm block tracking-widest uppercase">Daily Meaning</span><p id="detail-daily" class="text-2xl text-gray-700">...</p></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-sentence" class="view-layer z-30 bg-doraBg hidden">
+                 <div class="flex-1 flex flex-col gap-4 overflow-y-auto no-scrollbar pt-2 px-1 pb-24" id="sentence-scroll-container">
+                     <div class="bg-white rounded-[2rem] p-6 shadow-sm flex items-center justify-between">
+                        <div class="flex items-center gap-3"><div class="w-2 h-10 bg-[#FF9800] rounded-full"></div><h2 id="detail-word-b" class="text-3xl font-bold text-doraBlue">Word</h2></div>
+                        <button onclick="router.back()" class="text-doraRed active:scale-90"><i data-lucide="undo-2" class="w-10 h-10"></i></button>
+                    </div>
+                    <div id="sentences-container" class="flex flex-col gap-4"></div>
+                 </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="modal-sort" class="fixed inset-0 z-[70] hidden bg-black/20 backdrop-blur-md flex justify-center items-center px-6" onclick="modal.close('sort')">
+        <div class="glass-panel w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl" onclick="event.stopPropagation()">
+            <div class="space-y-6">
+                <div>
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase mb-3 px-1 tracking-widest">Filter By Status</h4>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="app.setFilter('all')" id="filter-all" class="filter-btn py-3 rounded-xl bg-gray-50 font-bold text-[10px] border-2 border-transparent active:scale-95 transition-all">ALL</button>
+                        <button onclick="app.setFilter('new')" id="filter-new" class="filter-btn py-3 rounded-xl bg-gray-50 font-bold text-[10px] border-2 border-transparent active:scale-95 transition-all">NEW</button>
+                        <button onclick="app.setFilter('favorite')" id="filter-favorite" class="filter-btn py-3 rounded-xl bg-gray-50 font-bold text-[10px] border-2 border-transparent active:scale-95 transition-all">STAR</button>
+                        <button onclick="app.setFilter('mastered')" id="filter-mastered" class="filter-btn py-3 rounded-xl bg-gray-50 font-bold text-[10px] border-2 border-transparent active:scale-95 transition-all">BURN</button>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase mb-3 px-1 tracking-widest">Sort Order</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="app.setSort('random')" id="sort-random" class="col-span-2 flex justify-between p-3 rounded-xl bg-gray-50 border-2 border-transparent font-bold text-sm"><span>Random</span><i data-lucide="shuffle" class="w-4 h-4"></i></button>
+                        <button onclick="app.setSort('newest')" id="sort-newest" class="flex justify-between p-3 rounded-xl bg-gray-50 border-2 border-transparent font-bold text-[11px]"><span>Newest</span><i data-lucide="arrow-down" class="w-4 h-4"></i></button>
+                        <button onclick="app.setSort('oldest')" id="sort-oldest" class="flex justify-between p-3 rounded-xl bg-gray-50 border-2 border-transparent font-bold text-[11px]"><span>Oldest</span><i data-lucide="arrow-up" class="w-4 h-4"></i></button>
+                        <button onclick="app.setSort('az')" id="sort-az" class="flex justify-between p-3 rounded-xl bg-gray-50 border-2 border-transparent font-bold text-[11px]"><span>A to Z</span><i data-lucide="sort-asc" class="w-4 h-4"></i></button>
+                        <button onclick="app.setSort('za')" id="sort-za" class="flex justify-between p-3 rounded-xl bg-gray-50 border-2 border-transparent font-bold text-[11px]"><span>Z to A</span><i data-lucide="sort-desc" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-settings" class="fixed inset-0 bg-black/40 backdrop-blur-md z-[80] hidden flex items-center justify-center px-6">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold text-doraBlue">Settings</h3>
+                <button onclick="modal.close('settings')"><i data-lucide="x" class="w-6 h-6 text-gray-400"></i></button>
+            </div>
+            <div class="space-y-4">
+                <div class="p-5 bg-sky-100 rounded-[1.8rem] flex justify-between items-center">
+                    <div class="flex items-center gap-3 font-bold text-sky-700"><i data-lucide="candy" class="w-5 h-5"></i>Import CSV</div>
+                    <label class="bg-white text-sky-500 px-4 py-2 rounded-xl cursor-pointer font-bold shadow-sm text-sm">SELECT<input type="file" accept=".csv" class="hidden" onchange="dataManager.importCSV(this)"></label>
+                </div>
+                <button onclick="dataManager.exportCSV()" class="w-full p-5 bg-green-100 text-green-700 rounded-[1.8rem] font-bold flex justify-between items-center"><i data-lucide="gift" class="w-5 h-5"></i><span>Export CSV</span><i data-lucide="download" class="w-5 h-5"></i></button>
+                <button onclick="dataManager.deleteAll()" class="w-full p-5 bg-orange-100 text-orange-700 rounded-[1.8rem] font-bold flex justify-between items-center"><i data-lucide="bomb" class="w-5 h-5"></i><span>Delete All Data</span><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <nav class="fixed bottom-0 w-full max-w-2xl h-[85px] bg-doraBlue rounded-t-[2.5rem] flex items-center justify-around px-6 z-50 text-white/60">
+        <button onclick="app.setMode('normal')" class="nav-btn flex flex-col items-center gap-1" id="nav-home"><i data-lucide="home" class="w-7 h-7"></i><span class="text-[10px] font-bold">HOME</span></button>
+        <button onclick="app.setMode('quiz')" class="nav-btn flex flex-col items-center gap-1" id="nav-quiz"><i data-lucide="graduation-cap" class="w-7 h-7"></i><span class="text-[10px] font-bold">QUIZ</span></button>
+        <button onclick="modal.open('settings')" class="nav-btn flex flex-col items-center gap-1" id="nav-settings"><i data-lucide="settings-2" class="w-7 h-7"></i><span class="text-[10px] font-bold">SET</span></button>
+    </nav>
+
+    <script>
+    const state = { 
+        allData: [], displayList: [], currentIndex: 0, 
+        mode: 'normal', sort: 'newest', filter: 'all',
+        currentView: 'flashcard', speechRate: 0.8,
+        isAutoplay: false, autoplayTimer: null
+    };
+
+    const dataManager = {
+        init: () => {
+            const stored = localStorage.getItem('doraMem_data');
+            state.allData = stored ? JSON.parse(stored).map((item, idx) => ({...item, _id: item._id || Date.now() + idx})) : [];
+            app.applySortAndFilter();
+        },
+        save: () => { localStorage.setItem('doraMem_data', JSON.stringify(state.allData)); },
+        importCSV: (input) => {
+            const file = input.files[0]; if (!file) return;
+            Papa.parse(file, {
+                header: true, skipEmptyLines: true,
+                complete: (results) => {
+                    const newItems = results.data.map((item, idx) => ({
+                        Word: (item.Word || "").trim(),
+                        Context_Mean: (item.Context_Mean || "").trim(),
+                        Daily_Mean: (item.Daily_Mean || "").trim(),
+                        Sentence_1: (item.Sentence_1 || "").trim(),
+                        Sentence_2: (item.Sentence_2 || "").trim(),
+                        Sentence_3: (item.Sentence_3 || "").trim(),
+                        Status: (item.Status || "new").trim(),
+                        _id: Date.now() + idx
+                    }));
+                    state.allData = [...state.allData, ...newItems]; dataManager.save(); app.applySortAndFilter(); modal.close('settings');
+                }
+            });
+        },
+        exportCSV: () => {
+            if (state.allData.length === 0) return alert("No data!");
+            const csv = Papa.unparse(state.allData);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob); link.setAttribute("download", "dora_backup.csv");
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        },
+        deleteAll: () => { if(confirm("Confirm Delete?")) { state.allData = []; dataManager.save(); app.applySortAndFilter(); modal.close('settings'); } }
+    };
+
+    const app = {
+        init: () => { dataManager.init(); ui.initListeners(); lucide.createIcons(); },
+        applySortAndFilter: () => {
+            let list = [...state.allData];
+            if (state.mode === 'quiz') list = list.filter(i => i.Status !== 'mastered');
+            if (state.filter !== 'all') list = list.filter(i => i.Status === state.filter);
+            
+            switch(state.sort) {
+                case 'random': list.sort(() => Math.random() - 0.5); break;
+                case 'newest': list.sort((a, b) => b._id - a._id); break;
+                case 'oldest': list.sort((a, b) => a._id - b._id); break;
+                case 'az': list.sort((a, b) => a.Word.localeCompare(b.Word)); break;
+                case 'za': list.sort((a, b) => b.Word.localeCompare(a.Word)); break;
+            }
+            state.displayList = list; state.currentIndex = 0; 
+            ui.renderHeader(); ui.renderCard(); ui.updateFilterButtons();
+        },
+        setSort: (type) => { state.sort = type; app.applySortAndFilter(); modal.close('sort'); },
+        setFilter: (f) => { state.filter = f; app.applySortAndFilter(); modal.close('sort'); },
+        setMode: (mode) => {
+            state.mode = mode;
+            document.getElementById('mode-badge-text').innerText = mode === 'quiz' ? "QUIZ MODE" : "LEARNING";
+            document.getElementById('nav-buttons-normal').classList.toggle('hidden', mode === 'quiz');
+            document.getElementById('nav-buttons-quiz').classList.toggle('hidden', mode !== 'quiz');
+            app.applySortAndFilter(); router.navigate('flashcard');
+        },
+        nextCard: (speak=true) => {
+            if(!state.displayList.length) return;
+            state.currentIndex = (state.currentIndex + 1) % state.displayList.length;
+            ui.renderCard(); 
+            if (state.currentView !== 'flashcard') router.updateDetails();
+            if(speak) ui.playTTS(1);
+        },
+        prevCard: () => {
+            if(!state.displayList.length) return;
+            state.currentIndex = (state.currentIndex - 1 + state.displayList.length) % state.displayList.length;
+            ui.renderCard(); 
+            if (state.currentView !== 'flashcard') router.updateDetails();
+            ui.playTTS(1);
+        },
+        getCurrentItem: () => state.displayList[state.currentIndex],
+        toggleAutoplay: () => {
+            state.isAutoplay = !state.isAutoplay;
+            const btn = document.getElementById('btn-autoplay');
+            btn.innerHTML = state.isAutoplay ? '<i data-lucide="pause" class="w-6 h-6"></i>' : '<i data-lucide="play" class="w-6 h-6 fill-current"></i>';
+            btn.classList.toggle('bg-doraBlue', state.isAutoplay);
+            btn.classList.toggle('text-white', state.isAutoplay);
+            lucide.createIcons();
+            if (state.isAutoplay) app.autoplayLoop(); 
+            else { clearTimeout(state.autoplayTimer); window.speechSynthesis.cancel(); }
+        },
+        autoplayLoop: () => {
+            if (!state.isAutoplay) return;
+            const item = app.getCurrentItem();
+            if (!item) return;
+
+            if (state.currentView === 'sentence') {
+                // 在 B 頁面：執行連鎖朗讀，唸完會自動 call 下一張
+                ui.playAllSentences(item, true); 
+            } else {
+                // 普通頁面：維持原本定時器
+                ui.playTTS(1);
+                state.autoplayTimer = setTimeout(() => {
+                    app.nextCard(false);
+                    app.autoplayLoop();
+                }, 3000);
+            }
+        }
+    };
+
+    const ui = {
+        initListeners: () => {
+            document.getElementById('btn-prev-card').onclick = () => { app.prevCard(); ui.stopAutoplay(); };
+            document.getElementById('btn-next-card').onclick = () => { app.nextCard(); ui.stopAutoplay(); };
+            document.getElementById('btn-tts').onclick = () => ui.playTTS(1);
+            document.getElementById('btn-autoplay').onclick = () => app.toggleAutoplay();
+            document.getElementById('btn-status').onclick = () => {
+                const item = app.getCurrentItem(); if(!item) return;
+                const map = { 'new': 'mastered', 'mastered': 'favorite', 'favorite': 'new' };
+                item.Status = map[item.Status] || 'new'; dataManager.save(); ui.renderHeader(); ui.updateStatusIcon(item.Status);
+            };
+            document.getElementById('btn-quiz-forget').onclick = ui.quizForget;
+            document.getElementById('btn-quiz-remember').onclick = ui.quizRemember;
+
+            document.addEventListener('keydown', (e) => {
+                const item = app.getCurrentItem(); if (!item) return;
+                
+                // 1. 全域向下鍵切換
+                if (e.key === 'ArrowDown') { 
+                    app.nextCard(); 
+                    ui.stopAutoplay(); 
+                    return; 
+                }
+
+                if (state.currentView === 'flashcard') {
+                    if (e.key === 'ArrowUp') app.prevCard();
+                    else if (e.key === 'Enter') app.nextCard();
+                    else if (e.key === 'ArrowLeft') { state.mode === 'normal' ? router.navigate('meaning') : ui.quizForget(); }
+                    else if (e.key === 'ArrowRight') { state.mode === 'normal' ? router.navigate('sentence') : ui.quizRemember(); }
+                    else if (e.key === ' ') { e.preventDefault(); app.toggleAutoplay(); }
+                } else {
+                    // 2. AB 頁面邏輯
+                    if (e.key === 'ArrowUp') { router.back(); ui.stopAutoplay(); }
+                    else if (e.key === 'ArrowLeft' && state.currentView === 'sentence') router.navigate('meaning');
+                    else if (e.key === 'ArrowRight' && state.currentView === 'meaning') router.navigate('sentence');
+                    // 修正：B 頁面右鍵觸發連鎖朗讀與移動
+                    else if (e.key === 'ArrowRight' && state.currentView === 'sentence') ui.playAllSentences(item, false);
+                }
+            });
+        },
+        stopAutoplay: () => { if(state.isAutoplay) app.toggleAutoplay(); },
+        renderHeader: () => {
+            const total = state.displayList.length;
+            const mastered = state.displayList.filter(i => i.Status === 'mastered').length;
+            document.getElementById('header-counter').innerText = `${mastered} / ${total}`;
+        },
+        renderCard: () => {
+            const item = app.getCurrentItem();
+            document.getElementById('hint-container').classList.remove('opacity-100');
+            document.getElementById('action-buttons-container').classList.remove('opacity-0');
+            document.getElementById('card-word').innerText = item ? item.Word : "No Data";
+            if(item) ui.updateStatusIcon(item.Status);
+        },
+        updateStatusIcon: (status) => {
+            const btn = document.getElementById('btn-status');
+            btn.innerHTML = status === 'mastered' ? '<i data-lucide="flame" class="w-8 h-8 text-doraRed fill-doraRed"></i>' : (status === 'favorite' ? '<i data-lucide="star" class="w-8 h-8 text-doraYellow fill-doraYellow"></i>' : '<div class="w-4 h-4 rounded-full bg-gray-300"></div>');
+            lucide.createIcons();
+        },
+        updateFilterButtons: () => {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.id === `filter-${state.filter}`));
+        },
+        playTTS: (repeat = 1, callback = null) => {
+            const item = app.getCurrentItem(); if (!item) return;
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(item.Word);
+            u.rate = state.speechRate;
+            if (callback) u.onend = callback;
+            window.speechSynthesis.speak(u);
+        },
+        // --- 核心優化：連鎖朗讀、捲動與 Autoplay 銜接 ---
+        playAllSentences: (item, isFromAutoplay = false) => {
+            window.speechSynthesis.cancel();
+            const container = document.getElementById('sentences-container');
+            const elements = container.querySelectorAll('.glass-panel');
+            const sentences = [item.Sentence_1, item.Sentence_2, item.Sentence_3].filter(s => s && s.trim());
+            
+            let idx = -1; // 從單字本身開始唸
+
+            const speakNext = () => {
+                // 如果在執行中途關閉了 Autoplay 且目前是 Autoplay 模式，則中斷
+                if (isFromAutoplay && !state.isAutoplay) return;
+
+                if (idx === -1) {
+                    // 唸單字
+                    const uWord = new SpeechSynthesisUtterance(item.Word);
+                    uWord.rate = state.speechRate;
+                    uWord.onend = () => { idx++; setTimeout(speakNext, 600); };
+                    window.speechSynthesis.speak(uWord);
+                } else if (idx < sentences.length) {
+                    // 唸例句 + 移動 + 高亮
+                    const currentEl = elements[idx];
+                    if (currentEl) {
+                        currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        elements.forEach(el => el.classList.remove('reading-now'));
+                        currentEl.classList.add('reading-now');
+                    }
+                    const uSent = new SpeechSynthesisUtterance(sentences[idx]);
+                    uSent.rate = state.speechRate;
+                    uSent.onend = () => { idx++; setTimeout(speakNext, 500); };
+                    window.speechSynthesis.speak(uSent);
+                } else {
+                    // 全部唸完，清除高亮
+                    elements.forEach(el => el.classList.remove('reading-now'));
+                    // 如果是 Autoplay，等待一秒後切換下一個單字
+                    if (isFromAutoplay && state.isAutoplay) {
+                        state.autoplayTimer = setTimeout(() => {
+                            app.nextCard(false);
+                            app.autoplayLoop();
+                        }, 1200);
+                    }
+                }
+            };
+            speakNext();
+        },
+        quizForget: () => { 
+            const item = app.getCurrentItem(); 
+            if(item) { 
+                document.getElementById('hint-text').innerText = item.Daily_Mean; 
+                document.getElementById('action-buttons-container').classList.add('opacity-0'); 
+                document.getElementById('hint-container').classList.add('opacity-100'); 
+            } 
+        },
+        quizRemember: () => { 
+            const item = app.getCurrentItem(); if(item) { item.Status = 'mastered'; dataManager.save(); } 
+            app.nextCard(true); 
+        },
+        updateNav: () => {
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            if (state.currentView === 'flashcard') document.getElementById(state.mode === 'quiz' ? 'nav-quiz' : 'nav-home').classList.add('active');
+            else if (state.currentView === 'settings') document.getElementById('nav-settings').classList.add('active');
+            lucide.createIcons();
+        }
+    };
+
+    const router = {
+        navigate: (id) => {
+            state.currentView = id;
+            document.querySelectorAll('.view-layer').forEach(el => el.classList.toggle('active', el.id === `view-${id}`));
+            router.updateDetails(); ui.updateNav();
+        },
+        updateDetails: () => {
+            const item = app.getCurrentItem(); if(!item) return;
+            if (state.currentView === 'meaning') {
+                document.getElementById('detail-word-a').innerText = item.Word;
+                document.getElementById('detail-context').innerText = item.Context_Mean;
+                document.getElementById('detail-daily').innerText = item.Daily_Mean;
+            } else if (state.currentView === 'sentence') {
+                document.getElementById('detail-word-b').innerText = item.Word;
+                const container = document.getElementById('sentences-container'); container.innerHTML = '';
+                [item.Sentence_1, item.Sentence_2, item.Sentence_3].filter(s => s && s.trim()).forEach((s, i) => {
+                    const d = document.createElement('div'); 
+                    d.className = "glass-panel rounded-2xl p-5 flex justify-between items-center transition-all duration-500 border-2 border-transparent";
+                    d.innerHTML = `<p class="text-lg font-medium flex-1 pr-4">${s}</p><button onclick="window.speechSynthesis.cancel();window.speechSynthesis.speak(new SpeechSynthesisUtterance('${s.replace(/'/g, "\\'")}'))" class=\"w-10 h-10 rounded-full bg-doraBlue/10 text-doraBlue flex items-center justify-center shrink-0\"><i data-lucide=\"volume-2\" class=\"w-5 h-5\"></i></button>`;
+                    container.appendChild(d);
+                });
+                lucide.createIcons();
+            }
+        },
+        back: () => { window.speechSynthesis.cancel(); router.navigate('flashcard'); }
+    };
+
+    const modal = {
+        open: (id) => { document.getElementById(`modal-${id}`).classList.remove('hidden'); if (id === 'settings') state.currentView = 'settings'; ui.updateNav(); },
+        close: (id) => { document.getElementById(`modal-${id}`).classList.add('hidden'); if (id === 'settings') state.currentView = 'flashcard'; ui.updateNav(); },
+        toggleSortMenu: () => document.getElementById('modal-sort').classList.toggle('hidden')
+    };
+
+    window.onload = app.init;
+</script>
+
+</body>
+</html>
