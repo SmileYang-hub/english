@@ -5,7 +5,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Dora Memory"> <link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Doraemon English Adventure"> <link rel="apple-touch-icon" href="icon-192.png">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
@@ -20,7 +20,7 @@
 </script>    
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dora Memory - Pro Edition</title>
+    <title> Doraemon English Adventure – Smile Yang Edition</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -65,7 +65,7 @@
         <header class="flex justify-between items-center py-4 px-2 z-50 h-[80px]">
             <div class="flex items-center gap-2">
                 <i data-lucide="bell" class="w-6 h-6 text-doraYellow fill-doraYellow"></i>
-                <h1 class="text-xl font-bold text-doraBlue tracking-tight uppercase">Memory</h1>
+               
             </div>
             <div id="header-counter" class="text-xl font-bold text-doraGreen mx-auto">0 / 0</div>
             <button onclick="modal.toggleSortMenu()" class="flex items-center gap-2 text-sm font-bold bg-white/60 px-4 py-2 rounded-full text-doraBlue border border-doraBlue/20 backdrop-blur-sm active:scale-95 transition-all">
@@ -176,12 +176,21 @@
                 <h3 class="text-2xl font-bold text-doraBlue">Settings</h3>
                 <button onclick="modal.close('settings')"><i data-lucide="x" class="w-6 h-6 text-gray-400"></i></button>
             </div>
-            <div class="space-y-4">
-                <div class="p-5 bg-sky-100 rounded-[1.8rem] flex justify-between items-center">
-                    <div class="flex items-center gap-3 font-bold text-sky-700"><i data-lucide="candy" class="w-5 h-5"></i>Import CSV</div>
-                    <label class="bg-white text-sky-500 px-4 py-2 rounded-xl cursor-pointer font-bold shadow-sm text-sm">SELECT<input type="file" accept=".csv" class="hidden" onchange="dataManager.importCSV(this)"></label>
-                </div>
-                <button onclick="dataManager.exportCSV()" class="w-full p-5 bg-green-100 text-green-700 rounded-[1.8rem] font-bold flex justify-between items-center"><i data-lucide="gift" class="w-5 h-5"></i><span>Export CSV</span><i data-lucide="download" class="w-5 h-5"></i></button>
+          
+
+<div class="space-y-4">              
+                                   
+                                  
+<input type="file" id="csv-upload" accept=".csv" class="hidden" onchange="dataManager.importCSV(this)">
+
+<button onclick="document.getElementById('csv-upload').click()"
+    class="w-full p-5 bg-blue-100 text-blue-700 rounded-[1.8rem] font-bold flex justify-between items-center active:scale-95 transition-transform">
+    <i data-lucide="footprints" class="w-5 h-5"></i>
+    <span>Import CSV</span>
+    <i data-lucide="upload" class="w-5 h-5"></i>
+</button>
+
+<button onclick="dataManager.exportCSV()" class="w-full p-5 bg-green-100 text-green-700 rounded-[1.8rem] font-bold flex justify-between items-center"><i data-lucide="gift" class="w-5 h-5"></i><span>Export CSV</span><i data-lucide="download" class="w-5 h-5"></i></button>
                 <button onclick="dataManager.deleteAll()" class="w-full p-5 bg-orange-100 text-orange-700 rounded-[1.8rem] font-bold flex justify-between items-center"><i data-lucide="bomb" class="w-5 h-5"></i><span>Delete All Data</span><i data-lucide="trash-2" class="w-5 h-5"></i></button>
             </div>
         </div>
