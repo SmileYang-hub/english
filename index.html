@@ -57,6 +57,20 @@
         .nav-btn.active i { fill: #F1C40F; }
         .filter-btn.active { background-color: #009BDE !important; color: white !important; }
         .reading-now { background-color: #E0F2FE !important; border-color: #009BDE !important; transform: scale(1.02); }
+
+/* 加在原本的 style 標籤內 */
+    .reading-now { 
+        background-color: #E0F2FE !important; 
+        border-color: #009BDE !important; 
+        transform: scale(1.02); 
+        box-shadow: 0 4px 12px rgba(0, 155, 222, 0.1);
+    }
+    
+    /* 確保手機捲動容器運作正常 */
+    #sentence-scroll-container {
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+    }
     </style>
 </head>
 <body class="font-sans text-doraDark h-[100dvh] w-full flex flex-col items-center">
@@ -207,7 +221,18 @@
         allData: [], displayList: [], currentIndex: 0, 
         mode: 'normal', sort: 'newest', filter: 'all',
         currentView: 'flashcard', speechRate: 0.8,
-        isAutoplay: false, autoplayTimer: null
+        isAutoplay: false, autoplayTimer: null,
+        wakeLock: null // 新增：用於保持螢幕開啟
+    };
+
+    // 新增：螢幕常亮功能
+    const requestWakeLock = async () => {
+        if ('wakeLock' in navigator) {
+            try { state.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+        }
+    };
+    const releaseWakeLock = () => {
+        if (state.wakeLock) { state.wakeLock.release(); state.wakeLock = null; }
     };
 
     const dataManager = {
@@ -219,22 +244,26 @@
         save: () => { localStorage.setItem('doraMem_data', JSON.stringify(state.allData)); },
         importCSV: (input) => {
             const file = input.files[0]; if (!file) return;
-            Papa.parse(file, {
-                header: true, skipEmptyLines: true,
-                complete: (results) => {
-                    const newItems = results.data.map((item, idx) => ({
-                        Word: (item.Word || "").trim(),
-                        Context_Mean: (item.Context_Mean || "").trim(),
-                        Daily_Mean: (item.Daily_Mean || "").trim(),
-                        Sentence_1: (item.Sentence_1 || "").trim(),
-                        Sentence_2: (item.Sentence_2 || "").trim(),
-                        Sentence_3: (item.Sentence_3 || "").trim(),
-                        Status: (item.Status || "new").trim(),
-                        _id: Date.now() + idx
-                    }));
-                    state.allData = [...state.allData, ...newItems]; dataManager.save(); app.applySortAndFilter(); modal.close('settings');
-                }
-            });
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                Papa.parse(e.target.result, {
+                    header: true, skipEmptyLines: true,
+                    complete: (results) => {
+                        const newItems = results.data.map((item, idx) => ({
+                            Word: (item.Word || "").trim(),
+                            Context_Mean: (item.Context_Mean || "").trim(),
+                            Daily_Mean: (item.Daily_Mean || "").trim(),
+                            Sentence_1: (item.Sentence_1 || "").trim(),
+                            Sentence_2: (item.Sentence_2 || "").trim(),
+                            Sentence_3: (item.Sentence_3 || "").trim(),
+                            Status: (item.Status || "new").trim(),
+                            _id: Date.now() + idx
+                        }));
+                        state.allData = [...state.allData, ...newItems]; dataManager.save(); app.applySortAndFilter(); modal.close('settings');
+                    }
+                });
+            };
+            reader.readAsText(file);
         },
         exportCSV: () => {
             if (state.allData.length === 0) return alert("No data!");
@@ -248,7 +277,7 @@
     };
 
     const app = {
-        init: () => { dataManager.init(); ui.initListeners(); lucide.createIcons(); },
+        init: () => { dataManager.init(); ui.initListeners(); ui.initTouchEvents(); lucide.createIcons(); },
         applySortAndFilter: () => {
             let list = [...state.allData];
             if (state.mode === 'quiz') list = list.filter(i => i.Status !== 'mastered');
@@ -278,7 +307,10 @@
             state.currentIndex = (state.currentIndex + 1) % state.displayList.length;
             ui.renderCard(); 
             if (state.currentView !== 'flashcard') router.updateDetails();
-            if(speak) ui.playTTS(1);
+            if(speak) {
+                if(state.currentView === 'sentence') ui.playAllSentences(app.getCurrentItem(), state.isAutoplay);
+                else ui.playTTS(1);
+            }
         },
         prevCard: () => {
             if(!state.displayList.length) return;
@@ -295,8 +327,8 @@
             btn.classList.toggle('bg-doraBlue', state.isAutoplay);
             btn.classList.toggle('text-white', state.isAutoplay);
             lucide.createIcons();
-            if (state.isAutoplay) app.autoplayLoop(); 
-            else { clearTimeout(state.autoplayTimer); window.speechSynthesis.cancel(); }
+            if (state.isAutoplay) { requestWakeLock(); app.autoplayLoop(); } 
+            else { releaseWakeLock(); clearTimeout(state.autoplayTimer); window.speechSynthesis.cancel(); }
         },
         autoplayLoop: () => {
             if (!state.isAutoplay) return;
@@ -304,10 +336,8 @@
             if (!item) return;
 
             if (state.currentView === 'sentence') {
-                // 在 B 頁面：執行連鎖朗讀，唸完會自動 call 下一張
                 ui.playAllSentences(item, true); 
             } else {
-                // 普通頁面：維持原本定時器
                 ui.playTTS(1);
                 state.autoplayTimer = setTimeout(() => {
                     app.nextCard(false);
@@ -333,14 +363,7 @@
 
             document.addEventListener('keydown', (e) => {
                 const item = app.getCurrentItem(); if (!item) return;
-                
-                // 1. 全域向下鍵切換
-                if (e.key === 'ArrowDown') { 
-                    app.nextCard(); 
-                    ui.stopAutoplay(); 
-                    return; 
-                }
-
+                if (e.key === 'ArrowDown') { app.nextCard(); ui.stopAutoplay(); return; }
                 if (state.currentView === 'flashcard') {
                     if (e.key === 'ArrowUp') app.prevCard();
                     else if (e.key === 'Enter') app.nextCard();
@@ -348,14 +371,31 @@
                     else if (e.key === 'ArrowRight') { state.mode === 'normal' ? router.navigate('sentence') : ui.quizRemember(); }
                     else if (e.key === ' ') { e.preventDefault(); app.toggleAutoplay(); }
                 } else {
-                    // 2. AB 頁面邏輯
                     if (e.key === 'ArrowUp') { router.back(); ui.stopAutoplay(); }
                     else if (e.key === 'ArrowLeft' && state.currentView === 'sentence') router.navigate('meaning');
                     else if (e.key === 'ArrowRight' && state.currentView === 'meaning') router.navigate('sentence');
-                    // 修正：B 頁面右鍵觸發連鎖朗讀與移動
                     else if (e.key === 'ArrowRight' && state.currentView === 'sentence') ui.playAllSentences(item, false);
                 }
             });
+        },
+        // 新增：手勢滑動功能 (取代方向鍵)
+        initTouchEvents: () => {
+            let touchStartX = 0; let touchStartY = 0;
+            document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }, false);
+            document.addEventListener('touchend', e => {
+                let x = e.changedTouches[0].screenX; let y = e.changedTouches[0].screenY;
+                let dx = x - touchStartX; let dy = y - touchStartY;
+                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) { // 左右滑動
+                    if (dx > 0) { // 右滑 = 返回
+                        if (state.currentView !== 'flashcard') router.back();
+                    } else { // 左滑 = 前進
+                        if (state.currentView === 'flashcard') router.navigate('meaning');
+                        else if (state.currentView === 'meaning') router.navigate('sentence');
+                    }
+                } else if (Math.abs(dy) > 50) { // 上下滑動 = 下一個
+                    app.nextCard(); ui.stopAutoplay();
+                }
+            }, false);
         },
         stopAutoplay: () => { if(state.isAutoplay) app.toggleAutoplay(); },
         renderHeader: () => {
@@ -386,27 +426,26 @@
             if (callback) u.onend = callback;
             window.speechSynthesis.speak(u);
         },
-        // --- 核心優化：連鎖朗讀、捲動與 Autoplay 銜接 ---
+        // 優化後的 B 頁面朗讀與捲動
         playAllSentences: (item, isFromAutoplay = false) => {
             window.speechSynthesis.cancel();
+            // 先讓畫面捲到最上面顯示單字
+            const scrollContainer = document.getElementById('sentence-scroll-container');
+            if(scrollContainer) scrollContainer.scrollTo({top: 0, behavior: 'smooth'});
+
             const container = document.getElementById('sentences-container');
             const elements = container.querySelectorAll('.glass-panel');
             const sentences = [item.Sentence_1, item.Sentence_2, item.Sentence_3].filter(s => s && s.trim());
             
-            let idx = -1; // 從單字本身開始唸
-
+            let idx = -1; 
             const speakNext = () => {
-                // 如果在執行中途關閉了 Autoplay 且目前是 Autoplay 模式，則中斷
                 if (isFromAutoplay && !state.isAutoplay) return;
-
                 if (idx === -1) {
-                    // 唸單字
                     const uWord = new SpeechSynthesisUtterance(item.Word);
                     uWord.rate = state.speechRate;
                     uWord.onend = () => { idx++; setTimeout(speakNext, 600); };
                     window.speechSynthesis.speak(uWord);
                 } else if (idx < sentences.length) {
-                    // 唸例句 + 移動 + 高亮
                     const currentEl = elements[idx];
                     if (currentEl) {
                         currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -418,9 +457,7 @@
                     uSent.onend = () => { idx++; setTimeout(speakNext, 500); };
                     window.speechSynthesis.speak(uSent);
                 } else {
-                    // 全部唸完，清除高亮
                     elements.forEach(el => el.classList.remove('reading-now'));
-                    // 如果是 Autoplay，等待一秒後切換下一個單字
                     if (isFromAutoplay && state.isAutoplay) {
                         state.autoplayTimer = setTimeout(() => {
                             app.nextCard(false);
@@ -434,14 +471,25 @@
         quizForget: () => { 
             const item = app.getCurrentItem(); 
             if(item) { 
+                window.speechSynthesis.cancel();
                 document.getElementById('hint-text').innerText = item.Daily_Mean; 
                 document.getElementById('action-buttons-container').classList.add('opacity-0'); 
                 document.getElementById('hint-container').classList.add('opacity-100'); 
+                // 忘了：停一秒再念下一個字
+                setTimeout(() => { app.nextCard(); }, 1000);
             } 
         },
         quizRemember: () => { 
-            const item = app.getCurrentItem(); if(item) { item.Status = 'mastered'; dataManager.save(); } 
-            app.nextCard(true); 
+            const item = app.getCurrentItem(); 
+            if(item) { 
+                item.Status = 'mastered'; dataManager.save(); 
+                window.speechSynthesis.cancel(); // 先清空聲音
+                // 記得：停 600ms 後才進下一個單字並朗讀，解決聲音打結
+                setTimeout(() => {
+                    app.nextCard(true); 
+                    if (state.isAutoplay) app.autoplayLoop(); // 確保 Autoplay 繼續
+                }, 600);
+            } 
         },
         updateNav: () => {
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
